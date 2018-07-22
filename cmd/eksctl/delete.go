@@ -9,6 +9,7 @@ import (
 	"github.com/kubicorn/kubicorn/pkg/logger"
 
 	"github.com/weaveworks/eksctl/pkg/eks"
+	"github.com/weaveworks/eksctl/pkg/eks/api"
 	"github.com/weaveworks/eksctl/pkg/utils/kubeconfig"
 )
 
@@ -27,7 +28,7 @@ func deleteCmd() *cobra.Command {
 }
 
 func deleteClusterCmd() *cobra.Command {
-	cfg := &eks.ClusterConfig{}
+	cfg := &api.ClusterConfig{}
 
 	cmd := &cobra.Command{
 		Use:   "cluster",
@@ -50,7 +51,7 @@ func deleteClusterCmd() *cobra.Command {
 	return cmd
 }
 
-func doDeleteCluster(cfg *eks.ClusterConfig, name string) error {
+func doDeleteCluster(cfg *api.ClusterConfig, name string) error {
 	ctl := eks.New(cfg)
 
 	if err := ctl.CheckAuth(); err != nil {
@@ -75,19 +76,27 @@ func doDeleteCluster(cfg *eks.ClusterConfig, name string) error {
 		logger.Debug("continue despite error: %v", err)
 	}
 
-	if err := ctl.DeleteControlPlane(); err != nil {
+	// We can remove all 'DeprecatedDelete*' calls in 0.2.0
+
+	if err := ctl.DeprecatedDeleteControlPlane(); err != nil {
 		debugError(err)
 	}
 
-	if err := ctl.DeleteStackServiceRole(); err != nil {
+	stackManager := ctl.NewStackManager()
+
+	if err := stackManager.DeleteCluster(); err != nil {
 		debugError(err)
 	}
 
-	if err := ctl.DeleteStackVPC(); err != nil {
+	if err := stackManager.DeprecatedDeleteStackServiceRole(); err != nil {
 		debugError(err)
 	}
 
-	if err := ctl.DeleteStackDefaultNodeGroup(); err != nil {
+	if err := stackManager.DeprecatedDeleteStackVPC(); err != nil {
+		debugError(err)
+	}
+
+	if err := stackManager.DeprecatedDeleteStackDefaultNodeGroup(); err != nil {
 		debugError(err)
 	}
 
