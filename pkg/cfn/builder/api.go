@@ -15,16 +15,18 @@ import (
 )
 
 const (
-	awsStackName = "AWS::StackName"
-	fnSub        = "Fn::Sub"
-	fnJoin       = "Fn::Join"
-	fnGetAtt     = "Fn::GetAtt"
+	awsStackName  = "AWS::StackName"
+	fnSub         = "Fn::Sub"
+	fnJoin        = "Fn::Join"
+	fnGetAtt      = "Fn::GetAtt"
+	fnImportValue = "Fn::ImportValue"
 
-	ParamClusterName = "ClusterName"
+	ParamClusterName      = "ClusterName"
+	ParamClusterStackName = cfnOutputClusterStackName
 
 	clusterTemplateDescription   = "EKS cluster (with dedicated VPC & IAM role)"
 	nodeGroupTemplateDescription = "EKS nodes"
-	templateDescriptionSuffix    = "[created and managed by eksctl]"
+	templateDescriptionSuffix    = " [created and managed by eksctl]"
 )
 
 type resourceSet struct {
@@ -108,11 +110,15 @@ func (r *resourceSet) renderJSON() ([]byte, error) {
 	return r.template.JSON()
 }
 
+func exportName(prefix, output string) string {
+	return fmt.Sprintf("${%s}::%s", prefix, output)
+}
+
 func (r *resourceSet) newOutput(name string, value interface{}, export bool) {
 	o := map[string]interface{}{"Value": value}
 	if export {
 		o["Export"] = map[string]map[string]string{
-			"Name": {fnSub: fmt.Sprintf("${%s}::%s", awsStackName, name)},
+			"Name": map[string]string{fnSub: exportName(awsStackName, name)},
 		}
 	}
 	r.template.Outputs[name] = o
@@ -125,6 +131,10 @@ func (r *resourceSet) newJoinedOutput(name string, value []*gfn.StringIntrinsic,
 
 func (r *resourceSet) newOutputFromAtt(name, att string, export bool) {
 	r.newOutput(name, map[string]string{fnGetAtt: att}, export)
+}
+
+func makeImportValue(prefix, output string) *gfn.StringIntrinsic {
+	return gfn.NewStringIntrinsic(fnImportValue, makeSub(exportName(prefix, output)))
 }
 
 func getOutput(stack *cfn.Stack, key string) *string {

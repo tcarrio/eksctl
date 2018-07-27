@@ -15,21 +15,13 @@ const (
 	cfnOutputClusterVPC                      = "VPC"
 	cfnOutputClusterSubnets                  = "Subnets"
 	cfnOutputClusterSecurityGroup            = "SecurityGroup"
+	cfnOutputClusterStackName                = "ClusterStackName"
 )
 
 type clusterResourceSet struct {
-	resourceSet      *resourceSet
-	vpcRefs          *resourceRefsForVPC
-	controlPlaneRefs *resourceRefsForControlPlane
-}
-
-type resourceRefsForVPC struct {
-	vpc            *gfn.StringIntrinsic
+	resourceSet    *resourceSet
 	subnets        []*gfn.StringIntrinsic
 	securityGroups []*gfn.StringIntrinsic
-}
-
-type resourceRefsForControlPlane struct {
 }
 
 func NewClusterResourceSet() *clusterResourceSet {
@@ -52,14 +44,11 @@ func (c *clusterResourceSet) AddAllResources(availabilityZones []string) {
 	c.addResourcesForIAM()
 	c.addResourcesForControlPlane("1.10")
 
+	c.newOutput(cfnOutputClusterStackName, refStackName, false)
 }
 
 func (c *clusterResourceSet) RenderJSON() ([]byte, error) {
 	return c.resourceSet.renderJSON()
-}
-
-func (r *clusterResourceSet) newParameter(name, valueType, defaultValue string) *gfn.StringIntrinsic {
-	return r.resourceSet.newParameter(name, valueType, defaultValue)
 }
 
 func (r *clusterResourceSet) newStringParameter(name, defaultValue string) *gfn.StringIntrinsic {
@@ -83,8 +72,7 @@ func (c *clusterResourceSet) newOutputFromAtt(name, att string, export bool) {
 }
 
 func (c *clusterResourceSet) addResourcesForVPC(globalCIDR *net.IPNet, subnets map[string]*net.IPNet) {
-	refs := &resourceRefsForVPC{}
-	refs.vpc = c.newResource("VPC", &gfn.AWSEC2VPC{
+	refVPC := c.newResource("VPC", &gfn.AWSEC2VPC{
 		CidrBlock:          gfn.NewString(globalCIDR.String()),
 		EnableDnsSupport:   true,
 		EnableDnsHostnames: true,
@@ -93,11 +81,11 @@ func (c *clusterResourceSet) addResourcesForVPC(globalCIDR *net.IPNet, subnets m
 	refIG := c.newResource("InternetGateway", &gfn.AWSEC2InternetGateway{})
 	c.newResource("VPCGatewayAttachment", &gfn.AWSEC2VPCGatewayAttachment{
 		InternetGatewayId: refIG,
-		VpcId:             refs.vpc,
+		VpcId:             refVPC,
 	})
 
 	refRT := c.newResource("RouteTable", &gfn.AWSEC2RouteTable{
-		VpcId: refs.vpc,
+		VpcId: refVPC,
 	})
 
 	c.newResource("PublicSubnetRoute", &gfn.AWSEC2Route{
@@ -111,26 +99,24 @@ func (c *clusterResourceSet) addResourcesForVPC(globalCIDR *net.IPNet, subnets m
 		refSubnet := c.newResource("Subnet"+alias, &gfn.AWSEC2Subnet{
 			AvailabilityZone: gfn.NewString(az),
 			CidrBlock:        gfn.NewString(subnet.String()),
-			VpcId:            refs.vpc,
+			VpcId:            refVPC,
 		})
 		c.newResource("RouteTableAssociation"+alias, &gfn.AWSEC2SubnetRouteTableAssociation{
 			SubnetId:     refSubnet,
 			RouteTableId: refRT,
 		})
-		refs.subnets = append(refs.subnets, refSubnet)
+		c.subnets = append(c.subnets, refSubnet)
 	}
 
 	refSG := c.newResource("ControlPlaneSecurityGroup", &gfn.AWSEC2SecurityGroup{
 		GroupDescription: gfn.NewString("For communication between the cluster control plane and worker nodes"),
-		VpcId:            refs.vpc,
+		VpcId:            refVPC,
 	})
-	refs.securityGroups = []*gfn.StringIntrinsic{refSG}
+	c.securityGroups = []*gfn.StringIntrinsic{refSG}
 
-	c.vpcRefs = refs
-
-	c.newOutput(cfnOutputClusterVPC, refs.vpc, true)
-	c.newJoinedOutput(cfnOutputClusterSecurityGroup, refs.securityGroups, true)
-	c.newJoinedOutput(cfnOutputClusterSubnets, refs.subnets, true)
+	c.newOutput(cfnOutputClusterVPC, refVPC, true)
+	c.newJoinedOutput(cfnOutputClusterSecurityGroup, c.securityGroups, true)
+	c.newJoinedOutput(cfnOutputClusterSubnets, c.subnets, true)
 }
 
 func (c *clusterResourceSet) addResourcesForControlPlane(version string) {
@@ -139,8 +125,8 @@ func (c *clusterResourceSet) addResourcesForControlPlane(version string) {
 		RoleArn: gfn.NewStringIntrinsic(fnGetAtt, "ServiceRole.Arn"),
 		Version: gfn.NewString(version),
 		ResourcesVpcConfig: &gfn.AWSEKSCluster_ResourcesVpcConfig{
-			SubnetIds:        c.vpcRefs.subnets,
-			SecurityGroupIds: c.vpcRefs.securityGroups,
+			SubnetIds:        c.subnets,
+			SecurityGroupIds: c.securityGroups,
 		},
 	})
 

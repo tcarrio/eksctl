@@ -65,20 +65,30 @@ var (
 )
 
 type nodeGroupResourceSet struct {
-	resourceSet *resourceSet
-	vpc         *resourceRefsForVPC
+	resourceSet      *resourceSet
+	clusterStackName *gfn.StringIntrinsic
 }
 
-func newNodeGroupResourceSet() *nodeGroupResourceSet {
+func NewNodeGroupResourceSet() *nodeGroupResourceSet {
 	return &nodeGroupResourceSet{
 		resourceSet: newResourceSet(),
 	}
 }
 
-func (c *nodeGroupResourceSet) AddAllResources(availabilityZones []string) {
-	c.resourceSet.template.Description = nodeGroupTemplateDescription + templateDescriptionSuffix
-	c.addResourcesForIAM()
-	c.addResourcesForNodeGroup()
+func (n *nodeGroupResourceSet) AddAllResources(availabilityZones []string) {
+	n.resourceSet.template.Description = nodeGroupTemplateDescription + templateDescriptionSuffix
+
+	n.addResourcesForIAM()
+	n.addResourcesForNodeGroupSecurityGroups()
+	n.addResourcesForNodeGroup()
+}
+
+func (n *nodeGroupResourceSet) RenderJSON() ([]byte, error) {
+	return n.resourceSet.renderJSON()
+}
+
+func (n *nodeGroupResourceSet) newStringParameter(name, defaultValue string) *gfn.StringIntrinsic {
+	return n.resourceSet.newStringParameter(name, defaultValue)
 }
 
 func (n *nodeGroupResourceSet) newResource(name string, resource interface{}) *gfn.StringIntrinsic {
@@ -89,8 +99,13 @@ func (n *nodeGroupResourceSet) newOutputFromAtt(name, att string, export bool) {
 	n.resourceSet.newOutputFromAtt(name, att, export)
 }
 
-func (n *nodeGroupResourceSet) addResourcesForNodeGroup() {
+func (n *nodeGroupResourceSet) addResourcesForNodeGroupSecurityGroups() {
 	n.newResource("NodeSecurityGroup", &gfn.AWSEC2SecurityGroup{
-		VpcId: n.vpc.vpc,
+		VpcId: makeImportValue(ParamClusterStackName, cfnOutputClusterVPC),
 	})
+}
+
+func (n *nodeGroupResourceSet) addResourcesForNodeGroup() {
+	n.newStringParameter(ParamClusterName, "")
+	n.newStringParameter(ParamClusterStackName, "")
 }

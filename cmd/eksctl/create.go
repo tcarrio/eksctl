@@ -231,19 +231,12 @@ func runCreateTask(tasks map[string]func(chan error) error, taskErrs chan error)
 }
 
 func createCluster(ctl *eks.ClusterProvider, taskErrs chan error) {
-	// c.runCreateTask(map[string]func(chan error) error{
-	// 	"createStackServiceRole": func(errs chan error) error { return c.createStackServiceRole(errs) },
-	// 	"createStackVPC":         func(errs chan error) error { return c.createStackVPC(errs) },
-	// }, taskErrs)
-	// c.runCreateTask(map[string]func(chan error) error{
-	// 	"createControlPlane": func(errs chan error) error { return c.createControlPlane(errs) },
-	// }, taskErrs)
 	stackManager := ctl.NewStackManager()
 	runCreateTask(map[string]func(chan error) error{
 		"createStackCluster": func(errs chan error) error { return stackManager.CreateCluster(errs) },
 	}, taskErrs)
-	// c.runCreateTask(map[string]func(chan error) error{
-	// 	"createStackDefaultNodeGroup": func(errs chan error) error { return c.createStackDefaultNodeGroup(errs) },
-	// }, taskErrs)
+	runCreateTask(map[string]func(chan error) error{
+		"createStackDefaultNodeGroup": func(errs chan error) error { return stackManager.CreateNodeGroup(errs) },
+	}, taskErrs)
 	close(taskErrs)
 }

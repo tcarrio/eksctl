@@ -43,6 +43,8 @@ type ClusterConfig struct {
 	CertificateAuthorityData []byte
 	ARN                      string
 
+	ClusterStackName string
+
 	NodeInstanceRoleARN string
 
 	AvailabilityZones []string
